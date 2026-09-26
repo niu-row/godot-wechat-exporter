@@ -1,64 +1,204 @@
 # WeChat Mini Game Exporter for Godot
 
-Standalone Godot editor addon for building Godot projects as WeChat Mini Games.
+Godot 微信小游戏导出插件 / Standalone Godot editor addon for WeChat Mini Games.
 
-## Supported engine
+[简体中文](#简体中文) · [English](#english)
 
-This release supports exactly:
+---
+
+# 简体中文
+
+这是一个独立的 Godot 编辑器插件，用于把 Godot 项目构建、预览并上传为微信小游戏。
+
+## 支持环境
+
+当前版本严格支持：
 
 - Godot 4.7.2 stable official
 - commit `ed1daf0bf`
 - GL Compatibility renderer
-- GDScript / single-threaded Web export
+- GDScript
+- 单线程 Web/WASM 导出
 
-The publishing actions are disabled when the running editor does not match
-that engine/runtime pair.
+如果当前 Godot 版本或 commit 不匹配，插件会禁用 Build、Preview 和 Upload。
 
-## Install
+## 安装
 
-Download the latest `godot-wechat-exporter-<version>.zip` from GitHub
-Releases and extract it into the project root. The installed path must be:
+从 GitHub Releases 下载最新的 `godot-wechat-exporter-<version>.zip`，解压到项目根目录。安装后目录必须是：
 
 ```text
 addons/wechat_exporter/
 ```
 
-Then enable **WeChat Mini Game** in **Project Settings → Plugins** and open
-**Tools → 微信小游戏...**.
-The addon is self-contained. It includes:
+然后在 **项目 → 项目设置 → 插件** 中启用 **WeChat Mini Game**，从顶部菜单打开 **工具 → 微信小游戏...**。
 
-- the editor publishing UI,
-- the Python exporter,
-- WeChat host templates,
-- the patched Godot 4.7.2 Web runtime.
+插件是 self-contained 的，发行包已经包含：
 
-A consumer project does not need a separate `tools/wechat/` directory.
+- 编辑器发布界面
+- Python exporter
+- 微信小游戏宿主模板
+- 修改后的 Godot 4.7.2 Web runtime
 
-## Project configuration
+普通游戏项目不需要复制 `tools/wechat/`。
 
-The plugin stores project publishing settings in:
+## 项目配置
+
+插件把项目发布配置保存在：
 
 ```text
 wechat_export.json
 ```
 
-Typical fields include AppID, Quick Adapt declaration, orientation,
-base-library version, diagnostics, optional exclude patterns, and autoloads
-that should be stripped only during publishing.
+常用配置包括 AppID、快速适配声明、屏幕方向、基础库版本、诊断开关、可选排除规则，以及只在发布时移除的 Autoload。
 
-The exporter itself always excludes the editor plugin from the game PCK.
-Other addons are preserved by default.
+Exporter 始终会把编辑器插件自身从游戏 PCK 中排除；其他 addon 默认保留。
+
+## 发布能力
+
+编辑器窗口支持：
+
+- Doctor 兼容性检查
+- Build
+- 二维码真机 Preview
+- 上传微信后台开发版本
+- 包体积统计
+- 安全协作式取消
+- 构建过期检测
+
+生成的微信小游戏工程：
+
+```text
+build/wechat/
+```
+
+本地构建元数据：
+
+```text
+build/wechat-build-manifest.json
+```
+
+该 sidecar manifest 不会上传到微信后台。
+
+## 自动更新
+
+从 0.6.1 起，插件默认使用经过签名的 GitHub stable 更新通道：
+
+```text
+https://github.com/niu-row/godot-wechat-exporter/releases/latest/download/stable.json
+```
+
+也可以在 **高级 → 插件更新** 中覆盖为其他 HTTP(S) 地址或本地 manifest。
+
+Updater 会：
+
+1. 使用内置公钥验证 `stable.json.sig`
+2. 检查 Godot 版本兼容性
+3. 下载 Release ZIP
+4. 校验 ZIP 的 SHA-256 和 size
+5. 只允许解压 `addons/wechat_exporter/**`
+6. 保存上一版本作为 rollback backup
+7. 安装新版本，并由用户确认后重启编辑器
+
+自动检查最多每 24 小时一次。插件不会静默安装更新。
+
+更新源保存在本机 EditorSettings，不会写入游戏项目的 `wechat_export.json`。
+
+## 微信开发者工具
+
+macOS 下会自动检测：
+
+```text
+/Applications/wechatwebdevtools.app
+```
+
+需要在微信开发者工具中开启一次：
+
+**设置 → 安全设置 → 服务端口**
+
+其他操作系统可以手动配置 CLI 路径，但目前端到端验收以 macOS 为主。
+
+## Runtime 限制
+
+目前不完整支持：
+
+- pthread / Threads
+- GDExtension
+- C# / .NET
+- Forward+ / Mobile renderer
+- WebSocket
+- IME / 键盘文本输入
+
+HTTP 请求通过 `wx.request` 桥接；小游戏仍需要在微信后台配置合法 request 域名。
+
+## 许可证
+
+Exporter / 插件代码使用 MIT License。
+
+发行包中包含的修改版 Godot runtime 和 Emscripten 生成代码继续遵循各自上游许可证，详见：
+
+- `THIRD_PARTY_NOTICES.md`
+- `LICENSES/`
+
+---
+
+# English
+
+This is a standalone Godot editor addon for building, previewing, and uploading Godot projects as WeChat Mini Games.
+
+## Supported engine
+
+The current release supports exactly:
+
+- Godot 4.7.2 stable official
+- commit `ed1daf0bf`
+- GL Compatibility renderer
+- GDScript
+- single-threaded Web/WASM export
+
+Build, Preview, and Upload are disabled when the running Godot version or commit does not match this supported pair.
+
+## Install
+
+Download the latest `godot-wechat-exporter-<version>.zip` from GitHub Releases and extract it into the project root.
+
+The installed path must be:
+
+```text
+addons/wechat_exporter/
+```
+
+Then enable **WeChat Mini Game** under **Project → Project Settings → Plugins** and open **Tools → 微信小游戏...**.The addon is self-contained and includes:
+
+- the editor publishing UI
+- the Python exporter
+- WeChat Mini Game host templates
+- the patched Godot 4.7.2 Web runtime
+
+Consumer projects do not need a separate `tools/wechat/` directory.
+
+## Project configuration
+
+Publishing settings are stored in:
+
+```text
+wechat_export.json
+```
+
+Typical fields include AppID, Quick Adapt declaration, orientation, base-library version, diagnostics, optional exclude patterns, and Autoloads that should be stripped only during publishing.
+
+The exporter always excludes the editor plugin itself from the game PCK. Other addons are preserved by default.
+
 ## Publishing
 
 The editor window supports:
 
-- compatibility Doctor,
-- Build,
-- device Preview with QR code,
-- WeChat developer-version Upload,
-- package-size dashboard,
-- safe cooperative cancellation,
-- build staleness detection.
+- compatibility Doctor
+- Build
+- device Preview with QR code
+- WeChat developer-version Upload
+- package-size reporting
+- safe cooperative cancellation
+- stale-build detection
 
 Generated WeChat project:
 
@@ -73,6 +213,7 @@ build/wechat-build-manifest.json
 ```
 
 The sidecar manifest is not uploaded to WeChat.
+
 ## Updates
 
 Version 0.6.1 and later use the signed GitHub stable channel by default:
@@ -81,22 +222,22 @@ Version 0.6.1 and later use the signed GitHub stable channel by default:
 https://github.com/niu-row/godot-wechat-exporter/releases/latest/download/stable.json
 ```
 
-The **高级 → 插件更新** panel can override this with another HTTP(S) or
-local manifest source. The updater:
+The source can be overridden under **高级 → 插件更新** with another HTTP(S) URL or a local manifest.
 
-1. verifies the manifest with the bundled public key,
-2. checks Godot compatibility,
-3. downloads the release ZIP,
-4. verifies package SHA-256 and size,
-5. extracts only `addons/wechat_exporter/**`,
-6. keeps the previous plugin as a rollback backup,
-7. installs the new addon and restarts the editor.
+The updater:
 
-Automatic checks run at most once per 24 hours when an update source is
-configured. Installation is explicit; updates are not silently installed.
+1. verifies `stable.json.sig` with the bundled public key
+2. checks Godot compatibility
+3. downloads the Release ZIP
+4. verifies package SHA-256 and size
+5. extracts only `addons/wechat_exporter/**`
+6. keeps the previous plugin as a rollback backup
+7. installs the new version and lets the user restart the editor
 
-The source URL is a local EditorSettings preference and is not written into
-the game project's `wechat_export.json`.
+Automatic checks run at most once every 24 hours. Updates are never installed silently.
+
+The update source is stored in local EditorSettings and is not written to the game's `wechat_export.json`.
+
 ## WeChat Developer Tools
 
 On macOS the addon auto-detects:
@@ -105,22 +246,30 @@ On macOS the addon auto-detects:
 /Applications/wechatwebdevtools.app
 ```
 
-The WeChat Developer Tools service port must be enabled once under
-**Settings → Security Settings → Service Port**.
+Enable the service port once in:
 
-Other operating systems can use a manually configured CLI path, but the
-current end-to-end acceptance coverage is macOS-first.
+**Settings → Security Settings → Service Port**
+
+Other operating systems can use a manually configured CLI path, but current end-to-end acceptance coverage is macOS-first.
 
 ## Runtime limitations
 
-Not fully supported: pthread/Threads, GDExtension, C#/.NET, Forward+/Mobile
-renderer, WebSocket, and IME/keyboard text input.
+Not fully supported:
 
-HTTP requests are bridged through `wx.request`; the mini game still needs
-the appropriate WeChat request-domain configuration.
+- pthread / Threads
+- GDExtension
+- C# / .NET
+- Forward+ / Mobile renderer
+- WebSocket
+- IME / keyboard text input
+
+HTTP requests are bridged through `wx.request`; the Mini Game still needs the appropriate WeChat request-domain configuration.
 
 ## License
 
-The exporter/plugin code is available under the MIT License. The bundled
-patched Godot runtime and Emscripten-generated glue retain their upstream
-licenses; see `THIRD_PARTY_NOTICES.md` and `LICENSES/`.
+The exporter/plugin code is licensed under the MIT License.
+
+The bundled patched Godot runtime and Emscripten-generated code retain their upstream licenses. See:
+
+- `THIRD_PARTY_NOTICES.md`
+- `LICENSES/`
