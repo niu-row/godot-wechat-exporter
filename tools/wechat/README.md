@@ -163,7 +163,7 @@ stable.json
 stable.json.sig   # 提供签名 key 时
 ```
 
-Release ZIP 的根目录只包含 `addons/wechat_exporter/**`。Updater 只允许从 ZIP 中解压这一前缀，安装时使用 staging + backup，随后重启 Godot Editor；高级页可执行上一版本回滚。当前仓库没有配置线上 remote，因此 `release.json` 的 `default_update_manifest` 暂为空；发布独立仓库后只需填入稳定 manifest URL。
+Release ZIP 的根目录只包含 `addons/wechat_exporter/**`。Updater 只允许从 ZIP 中解压这一前缀，安装时使用 staging + backup，随后重启 Godot Editor；高级页可执行上一版本回滚。源码已经托管在 `niu-row/godot-wechat-exporter`。仓库当前为 private，因此匿名 Godot 客户端无法直接读取 GitHub Release 资产；在仓库公开或提供独立公开下载源之前，`release.json` 的 `default_update_manifest` 保持为空。
 
 ## runtime 维护者操作
 
