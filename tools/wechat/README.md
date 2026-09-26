@@ -1,6 +1,6 @@
 # Godot 4.7.2 → 微信小游戏 Exporter
 
-当前版本：0.6.0。
+当前版本：0.6.1。
 
 这套工具把 **Godot 4.7.2 + GL Compatibility + GDScript + 单线程** 项目导出为微信小游戏工程。它不是浏览器模拟器，而是 Godot Web runtime 的微信宿主适配层。
 
@@ -144,7 +144,7 @@ tools/wechat/tests/run_tests.sh
 
 ```bash
 python3 tools/wechat/package_plugin.py \
-  --base-url https://example.invalid/releases/v0.6.0
+  --base-url https://example.invalid/releases/v0.6.1
 ```
 
 需要同时签名时：
@@ -163,7 +163,7 @@ stable.json
 stable.json.sig   # 提供签名 key 时
 ```
 
-Release ZIP 的根目录只包含 `addons/wechat_exporter/**`。Updater 只允许从 ZIP 中解压这一前缀，安装时使用 staging + backup，随后重启 Godot Editor；高级页可执行上一版本回滚。源码已经托管在 `niu-row/godot-wechat-exporter`。仓库当前为 private，因此匿名 Godot 客户端无法直接读取 GitHub Release 资产；在仓库公开或提供独立公开下载源之前，`release.json` 的 `default_update_manifest` 保持为空。
+Release ZIP 的根目录只包含 `addons/wechat_exporter/**`。Updater 只允许从 ZIP 中解压这一前缀，安装时使用 staging + backup，随后重启 Godot Editor；高级页可执行上一版本回滚。0.6.1 起默认更新源为 `https://github.com/niu-row/godot-wechat-exporter/releases/latest/download/stable.json`，并由 `stable.json.sig` 做 RSA/SHA-256 验签。
 
 ## runtime 维护者操作
 

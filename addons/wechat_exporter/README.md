@@ -16,7 +16,8 @@ that engine/runtime pair.
 
 ## Install
 
-Copy the whole directory into the project:
+Download the latest `godot-wechat-exporter-<version>.zip` from GitHub
+Releases and extract it into the project root. The installed path must be:
 
 ```text
 addons/wechat_exporter/
@@ -74,10 +75,14 @@ build/wechat-build-manifest.json
 The sidecar manifest is not uploaded to WeChat.
 ## Updates
 
-Open the **高级** tab and configure **插件更新**.
+Version 0.6.1 and later use the signed GitHub stable channel by default:
 
-The updater supports a signed `stable.json` source over HTTP(S) or a local
-manifest path. It:
+```text
+https://github.com/niu-row/godot-wechat-exporter/releases/latest/download/stable.json
+```
+
+The **高级 → 插件更新** panel can override this with another HTTP(S) or
+local manifest source. The updater:
 
 1. verifies the manifest with the bundled public key,
 2. checks Godot compatibility,
@@ -113,3 +118,9 @@ renderer, WebSocket, and IME/keyboard text input.
 
 HTTP requests are bridged through `wx.request`; the mini game still needs
 the appropriate WeChat request-domain configuration.
+
+## License
+
+The exporter/plugin code is available under the MIT License. The bundled
+patched Godot runtime and Emscripten-generated glue retain their upstream
+licenses; see `THIRD_PARTY_NOTICES.md` and `LICENSES/`.

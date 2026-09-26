@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1
+
+Public release preparation.
+
+- Added MIT license for the exporter/plugin code.
+- Included Godot and Emscripten license notices inside the distributable addon.
+- Configured the signed GitHub `latest/download/stable.json` update channel by default.
+- Kept exact Godot 4.7.2 compatibility and runtime ID `godot-4.7.2-wx-r1`.
+- Release ZIP remains restricted to `addons/wechat_exporter/**`.
+
 ## 0.6.0
 
 Initial standalone release.

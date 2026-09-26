@@ -532,7 +532,7 @@ func _build_advanced_tab(tabs: TabContainer) -> void:
     _update_status = Label.new()
     _update_status.add_theme_font_size_override("font_size", 17)
     _update_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    _update_status.text = "当前版本 0.6.0 · 尚未检查更新"
+    _update_status.text = "当前版本 0.6.1 · 尚未检查更新"
     update_body.add_child(_update_status)
 
     _update_source = LineEdit.new()
