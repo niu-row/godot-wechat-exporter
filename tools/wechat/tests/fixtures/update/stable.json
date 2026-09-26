@@ -1,0 +1,15 @@
+{
+  "channel": "stable",
+  "godot": {
+    "commit": "ed1daf0bf",
+    "version": "4.7.2"
+  },
+  "package": {
+    "sha256": "2cd15ddf2442c6b3ae2547249317a3a6f1b7dde288b316f1964e9beff8c5fdae",
+    "size": 713,
+    "url": "godot-wechat-exporter-99.0.0.zip"
+  },
+  "runtime_id": "test-runtime",
+  "schema": 1,
+  "version": "99.0.0"
+}

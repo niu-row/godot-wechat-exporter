@@ -1,0 +1,30 @@
+{
+  "godot_version": "4.7.2.stable",
+  "godot_commit": "ed1daf0bf",
+  "emscripten_version": "4.0.11",
+  "threads": false,
+  "javascript_eval": false,
+  "gl_gen_textures_import": "v",
+  "files": {
+    "godot.js": {
+      "size": 271068,
+      "sha256": "787db5138b4b677389dc97638d45ffa784e10562eaf4ae6df2cbafb6e0c78380"
+    },
+    "godot.wasm.br": {
+      "size": 6851332,
+      "sha256": "49923edb19c63650e5f6e767546b3d40587c43efbd16ab5b1d7fc047baae5f34"
+    }
+  },
+  "capabilities": {
+    "webgl2": true,
+    "touch": true,
+    "audio": true,
+    "userfs": true,
+    "http_request": true,
+    "websocket": false,
+    "ime": false,
+    "threads": false,
+    "gdextension": false,
+    "dotnet": false
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "project_name": "My Godot Game",
+  "appid": "touristappid",
+  "quick_adapt": false,
+  "orientation": "portrait",
+  "lib_version": "latest",
+  "prepare_mobile_textures": true,
+  "diagnostics": false,
+  "exclude_patterns": [],
+  "strip_autoloads": []
+}

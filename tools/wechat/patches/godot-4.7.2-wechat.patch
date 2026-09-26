@@ -1,0 +1,646 @@
+diff --git a/platform/web/js/engine/config.js b/platform/web/js/engine/config.js
+index d867376..ed19c1d 100644
+--- a/platform/web/js/engine/config.js
++++ b/platform/web/js/engine/config.js
+@@ -284,7 +284,10 @@ const InternalConfig = function (initConfig) { // eslint-disable-line no-unused-
+ 	Config.prototype.getModuleConfig = function (loadPath, response) {
+ 		let r = response;
+ 		const gdext = this.gdextensionLibs;
++		const wxMiniGame = typeof wx !== 'undefined' && typeof WXWebAssembly !== 'undefined';
++		const wxWasmPath = typeof response === 'string' ? response : `${loadPath}.wasm.br`;
+ 		return {
++			'canvas': this.canvas,
+ 			'print': this.onPrint,
+ 			'printErr': this.onPrintError,
+ 			'thisProgram': this.executable,
+@@ -295,7 +298,9 @@ const InternalConfig = function (initConfig) { // eslint-disable-line no-unused-
+ 				function done(result) {
+ 					onSuccess(result['instance'], result['module']);
+ 				}
+-				if (typeof (WebAssembly.instantiateStreaming) !== 'undefined') {
++				if (wxMiniGame) {
++					WXWebAssembly.instantiate(wxWasmPath, imports).then(done);
++				} else if (typeof (WebAssembly.instantiateStreaming) !== 'undefined') {
+ 					WebAssembly.instantiateStreaming(Promise.resolve(r), imports).then(done);
+ 				} else {
+ 					r.arrayBuffer().then(function (buffer) {
+@@ -331,26 +336,37 @@ const InternalConfig = function (initConfig) { // eslint-disable-line no-unused-
+ 	 * @param {function()} cleanup
+ 	 */
+ 	Config.prototype.getGodotConfig = function (cleanup) {
+-		// Try to find a canvas
+-		if (!(this.canvas instanceof HTMLCanvasElement)) {
+-			const nodes = document.getElementsByTagName('canvas');
+-			if (nodes.length && nodes[0] instanceof HTMLCanvasElement) {
+-				const first = nodes[0];
+-				this.canvas = /** @type {!HTMLCanvasElement} */ (first);
+-			}
++		const wxMiniGame = typeof wx !== 'undefined';
++		// Try to find a canvas.
++		if (wxMiniGame) {
+ 			if (!this.canvas) {
+-				throw new Error('No canvas found in page');
++				throw new Error('No canvas configured for WeChat Mini Game');
++			}
++		} else {
++			if (!(this.canvas instanceof HTMLCanvasElement)) {
++				const nodes = document.getElementsByTagName('canvas');
++				if (nodes.length && nodes[0] instanceof HTMLCanvasElement) {
++					const first = nodes[0];
++					this.canvas = /** @type {!HTMLCanvasElement} */ (first);
++				}
++				if (!this.canvas) {
++					throw new Error('No canvas found in page');
++				}
++			}
++			if (this.canvas.tabIndex < 0) {
++				this.canvas.tabIndex = 0;
+ 			}
+-		}
+-		// Canvas can grab focus on click, or key events won't work.
+-		if (this.canvas.tabIndex < 0) {
+-			this.canvas.tabIndex = 0;
+ 		}
+ 
+-		// Browser locale, or custom one if defined.
++		// Platform locale, or custom one if defined.
+ 		let locale = this.locale;
+ 		if (!locale) {
+-			locale = navigator.languages ? navigator.languages[0] : navigator.language;
++			if (wxMiniGame) {
++				const info = wx.getSystemInfoSync();
++				locale = info.language || 'en';
++			} else {
++				locale = navigator.languages ? navigator.languages[0] : navigator.language;
++			}
+ 			locale = locale.split('.')[0];
+ 		}
+ 		locale = locale.replace('-', '_');
+diff --git a/platform/web/js/engine/engine.js b/platform/web/js/engine/engine.js
+index 1aeeb62..b202f21 100644
+--- a/platform/web/js/engine/engine.js
++++ b/platform/web/js/engine/engine.js
+@@ -15,6 +15,10 @@ const Engine = (function () {
+ 	let loadPath = '';
+ 	let initPromise = null;
+ 
++	function isWeChatMiniGame() {
++		return typeof wx !== 'undefined' && typeof WXWebAssembly !== 'undefined';
++	}
++
+ 	/**
+ 	 * @classdesc The ``Engine`` class provides methods for loading and starting exported projects on the Web. For default export
+ 	 * settings, this is already part of the exported HTML page. To understand practical use of the ``Engine`` class,
+@@ -43,8 +47,12 @@ const Engine = (function () {
+ 	Engine.load = function (basePath, size) {
+ 		if (loadPromise == null) {
+ 			loadPath = basePath;
+-			loadPromise = preloader.loadPromise(`${loadPath}.wasm`, size, true);
+-			requestAnimationFrame(preloader.animateProgress);
++			if (isWeChatMiniGame()) {
++				loadPromise = Promise.resolve(`${loadPath}.wasm.br`);
++			} else {
++				loadPromise = preloader.loadPromise(`${loadPath}.wasm`, size, true);
++				requestAnimationFrame(preloader.animateProgress);
++			}
+ 		}
+ 		return loadPromise;
+ 	};
+@@ -92,8 +100,14 @@ const Engine = (function () {
+ 					// Make sure to test that when refactoring.
+ 					return new Promise(function (resolve, reject) {
+ 						promise.then(function (response) {
+-							const cloned = new Response(response.clone().body, { 'headers': [['content-type', 'application/wasm']] });
+-							Godot(me.config.getModuleConfig(loadPath, cloned)).then(function (module) {
++							let moduleConfig;
++							if (isWeChatMiniGame()) {
++								moduleConfig = me.config.getModuleConfig(loadPath, response);
++							} else {
++								const cloned = new Response(response.clone().body, { 'headers': [['content-type', 'application/wasm']] });
++								moduleConfig = me.config.getModuleConfig(loadPath, cloned);
++							}
++							Godot(moduleConfig).then(function (module) {
+ 								const paths = me.config.persistentPaths;
+ 								module['initFS'](paths).then(function (err) {
+ 									me.rtenv = module;
+@@ -284,3 +298,6 @@ const Engine = (function () {
+ if (typeof window !== 'undefined') {
+ 	window['Engine'] = Engine;
+ }
++if (typeof GameGlobal !== 'undefined') {
++	GameGlobal['Engine'] = Engine;
++}
+diff --git a/platform/web/js/engine/preloader.js b/platform/web/js/engine/preloader.js
+index 564c68d..ceec3f8 100644
+--- a/platform/web/js/engine/preloader.js
++++ b/platform/web/js/engine/preloader.js
+@@ -32,6 +32,25 @@ const Preloader = /** @constructor */ function () { // eslint-disable-line no-un
+ 			loaded: 0,
+ 			done: false,
+ 		};
++		if (typeof wx !== 'undefined' && !raw) {
++			const fs = wx.getFileSystemManager();
++			const filePath = file.startsWith('/') || /^[a-z]+:\/\//i.test(file) ? file : `/${file}`;
++			return new Promise(function (resolve, reject) {
++				fs.readFile({
++					filePath,
++					success: function (result) {
++						const buffer = result.data;
++						tracker[file].loaded = buffer.byteLength;
++						tracker[file].total = tracker[file].total || buffer.byteLength;
++						tracker[file].done = true;
++						resolve(buffer);
++					},
++					fail: function (error) {
++						reject(new Error(`Failed loading code package file '${filePath}': ${error.errMsg || error}`));
++					},
++				});
++			});
++		}
+ 		return fetch(file).then(function (response) {
+ 			if (!response.ok) {
+ 				return Promise.reject(new Error(`Failed loading file '${file}'`));
+diff --git a/platform/web/js/libs/library_godot_audio.js b/platform/web/js/libs/library_godot_audio.js
+index d1c996e..94086be 100644
+--- a/platform/web/js/libs/library_godot_audio.js
++++ b/platform/web/js/libs/library_godot_audio.js
+@@ -212,48 +212,42 @@ class SampleNodeBus {
+ 		/** @type {ChannelMergerNode} */
+ 		this._channelMerger = GodotAudio.ctx.createChannelMerger(NUMBER_OF_WEB_CHANNELS);
+ 
+-		this._channelSplitter
+-			.connect(this._l, GodotAudio.WebChannel.CHANNEL_L)
+-			.connect(
+-				this._channelMerger,
+-				GodotAudio.WebChannel.CHANNEL_L,
+-				GodotAudio.WebChannel.CHANNEL_L
+-			);
+-		this._channelSplitter
+-			.connect(this._r, GodotAudio.WebChannel.CHANNEL_R)
+-			.connect(
+-				this._channelMerger,
+-				GodotAudio.WebChannel.CHANNEL_L,
+-				GodotAudio.WebChannel.CHANNEL_R
+-			);
+-		this._channelSplitter
+-			.connect(this._sl, GodotAudio.WebChannel.CHANNEL_SL)
+-			.connect(
+-				this._channelMerger,
+-				GodotAudio.WebChannel.CHANNEL_L,
+-				GodotAudio.WebChannel.CHANNEL_SL
+-			);
+-		this._channelSplitter
+-			.connect(this._sr, GodotAudio.WebChannel.CHANNEL_SR)
+-			.connect(
+-				this._channelMerger,
+-				GodotAudio.WebChannel.CHANNEL_L,
+-				GodotAudio.WebChannel.CHANNEL_SR
+-			);
+-		this._channelSplitter
+-			.connect(this._c, GodotAudio.WebChannel.CHANNEL_C)
+-			.connect(
+-				this._channelMerger,
+-				GodotAudio.WebChannel.CHANNEL_L,
+-				GodotAudio.WebChannel.CHANNEL_C
+-			);
+-		this._channelSplitter
+-			.connect(this._lfe, GodotAudio.WebChannel.CHANNEL_L)
+-			.connect(
+-				this._channelMerger,
+-				GodotAudio.WebChannel.CHANNEL_L,
+-				GodotAudio.WebChannel.CHANNEL_LFE
+-			);
++		this._channelSplitter.connect(this._l, GodotAudio.WebChannel.CHANNEL_L);
++		this._l.connect(
++			this._channelMerger,
++			GodotAudio.WebChannel.CHANNEL_L,
++			GodotAudio.WebChannel.CHANNEL_L
++		);
++		this._channelSplitter.connect(this._r, GodotAudio.WebChannel.CHANNEL_R);
++		this._r.connect(
++			this._channelMerger,
++			GodotAudio.WebChannel.CHANNEL_L,
++			GodotAudio.WebChannel.CHANNEL_R
++		);
++		this._channelSplitter.connect(this._sl, GodotAudio.WebChannel.CHANNEL_SL);
++		this._sl.connect(
++			this._channelMerger,
++			GodotAudio.WebChannel.CHANNEL_L,
++			GodotAudio.WebChannel.CHANNEL_SL
++		);
++		this._channelSplitter.connect(this._sr, GodotAudio.WebChannel.CHANNEL_SR);
++		this._sr.connect(
++			this._channelMerger,
++			GodotAudio.WebChannel.CHANNEL_L,
++			GodotAudio.WebChannel.CHANNEL_SR
++		);
++		this._channelSplitter.connect(this._c, GodotAudio.WebChannel.CHANNEL_C);
++		this._c.connect(
++			this._channelMerger,
++			GodotAudio.WebChannel.CHANNEL_L,
++			GodotAudio.WebChannel.CHANNEL_C
++		);
++		this._channelSplitter.connect(this._lfe, GodotAudio.WebChannel.CHANNEL_L);
++		this._lfe.connect(
++			this._channelMerger,
++			GodotAudio.WebChannel.CHANNEL_L,
++			GodotAudio.WebChannel.CHANNEL_LFE
++		);
+ 
+ 		this._channelMerger.connect(this._bus.getInputNode());
+ 	}
+@@ -578,7 +572,7 @@ class SampleNode {
+ 	 * @returns {void}
+ 	 */
+ 	connect(node) {
+-		return this.getOutputNode().connect(node);
++		this.getOutputNode().connect(node);
+ 	}
+ 
+ 	/**
+@@ -617,6 +611,13 @@ class SampleNode {
+ 	 * If the worklet module is not loaded in, it will be added
+ 	 */
+ 	async connectPositionWorklet(start) {
++		if (typeof wx !== 'undefined') {
++			this._playbackPosition = this.offset;
++			if (start) {
++				this.start();
++			}
++			return;
++		}
+ 		await GodotAudio.audioPositionWorkletPromise;
+ 		if (this.isCanceled) {
+ 			return;
+@@ -925,9 +926,8 @@ class Bus {
+ 		/** @type {GainNode} */
+ 		this._muteNode = GodotAudio.ctx.createGain();
+ 
+-		this._gainNode
+-			.connect(this._soloNode)
+-			.connect(this._muteNode);
++		this._gainNode.connect(this._soloNode);
++		this._soloNode.connect(this._muteNode);
+ 	}
+ 
+ 	/**
+@@ -1249,8 +1249,27 @@ const _GodotAudio = {
+ 			}
+ 			// Do not specify, leave 'interactive' for good performance.
+ 			// opts['latencyHint'] = latency / 1000;
+-			const ctx = new (window.AudioContext || window.webkitAudioContext)(opts);
++			const ctx = typeof wx !== 'undefined' && typeof wx.createWebAudioContext === 'function'
++				? wx.createWebAudioContext()
++				: new (window.AudioContext || window.webkitAudioContext)(opts);
+ 			GodotAudio.ctx = ctx;
++			if (typeof wx !== 'undefined') {
++				Module['wxAudioState'] = function () {
++					return GodotAudio.ctx ? GodotAudio.ctx.state : 'missing';
++				};
++				Module['wxAudioSuspend'] = function () {
++					if (!GodotAudio.ctx || typeof GodotAudio.ctx.suspend !== 'function' || GodotAudio.ctx.state !== 'running') {
++						return Promise.resolve();
++					}
++					return GodotAudio.ctx.suspend();
++				};
++				Module['wxAudioResume'] = function () {
++					if (!GodotAudio.ctx || typeof GodotAudio.ctx.resume !== 'function' || GodotAudio.ctx.state === 'running') {
++						return Promise.resolve();
++					}
++					return GodotAudio.ctx.resume();
++				};
++			}
+ 			ctx.onstatechange = function () {
+ 				let state = 0;
+ 				switch (ctx.state) {
+@@ -1282,8 +1301,12 @@ const _GodotAudio = {
+ 			}, 1000);
+ 			GodotOS.atexit(GodotAudio.close_async);
+ 
+-			const path = GodotConfig.locate_file('godot.audio.position.worklet.js');
+-			GodotAudio.audioPositionWorkletPromise = ctx.audioWorklet.addModule(path);
++			if (typeof wx !== 'undefined') {
++				GodotAudio.audioPositionWorkletPromise = Promise.resolve();
++			} else {
++				const path = GodotConfig.locate_file('godot.audio.position.worklet.js');
++				GodotAudio.audioPositionWorkletPromise = ctx.audioWorklet.addModule(path);
++			}
+ 
+ 			return ctx.destination.channelCount;
+ 		},
+@@ -1539,6 +1562,9 @@ const _GodotAudio = {
+ 	godot_audio_is_available__sig: 'i',
+ 	godot_audio_is_available__proxy: 'sync',
+ 	godot_audio_is_available: function () {
++		if (typeof wx !== 'undefined' && typeof wx.createWebAudioContext === 'function') {
++			return 1;
++		}
+ 		if (!(window.AudioContext || window.webkitAudioContext)) {
+ 			return 0;
+ 		}
+@@ -1548,6 +1574,9 @@ const _GodotAudio = {
+ 	godot_audio_has_worklet__proxy: 'sync',
+ 	godot_audio_has_worklet__sig: 'i',
+ 	godot_audio_has_worklet: function () {
++		if (typeof wx !== 'undefined') {
++			return 0;
++		}
+ 		return GodotAudio.ctx && GodotAudio.ctx.audioWorklet ? 1 : 0;
+ 	},
+ 
+diff --git a/platform/web/js/libs/library_godot_display.js b/platform/web/js/libs/library_godot_display.js
+index 8117259..6bb2c8d 100644
+--- a/platform/web/js/libs/library_godot_display.js
++++ b/platform/web/js/libs/library_godot_display.js
+@@ -528,7 +528,8 @@ const GodotDisplay = {
+ 			return false;
+ 		}
+ 		try {
+-			return !!document.createElement('canvas').getContext(p_version === 2 ? 'webgl2' : 'webgl');
++			const canvas = typeof wx !== 'undefined' ? GodotConfig.canvas : document.createElement('canvas');
++			return !!canvas.getContext(p_version === 2 ? 'webgl2' : 'webgl');
+ 		} catch (e) { /* Not available */ }
+ 		return false;
+ 	},
+@@ -597,12 +598,18 @@ const GodotDisplay = {
+ 	godot_js_display_window_title_set__proxy: 'sync',
+ 	godot_js_display_window_title_set__sig: 'vi',
+ 	godot_js_display_window_title_set: function (p_data) {
++		if (typeof wx !== 'undefined') {
++			return;
++		}
+ 		document.title = GodotRuntime.parseString(p_data);
+ 	},
+ 
+ 	godot_js_display_window_icon_set__proxy: 'sync',
+ 	godot_js_display_window_icon_set__sig: 'vii',
+ 	godot_js_display_window_icon_set: function (p_ptr, p_len) {
++		if (typeof wx !== 'undefined') {
++			return;
++		}
+ 		let link = document.getElementById('-gd-engine-icon');
+ 		const old_icon = GodotDisplay.window_icon;
+ 		if (p_ptr) {
+diff --git a/platform/web/js/libs/library_godot_fetch.js b/platform/web/js/libs/library_godot_fetch.js
+index eeb3978..c1c9bfd 100644
+--- a/platform/web/js/libs/library_godot_fetch.js
++++ b/platform/web/js/libs/library_godot_fetch.js
+@@ -69,11 +69,11 @@ const GodotFetch = {
+ 		},
+ 
+ 		onerror: function (id, err) {
+-			GodotRuntime.error(err);
+ 			const obj = IDHandler.get(id);
+ 			if (!obj) {
+ 				return;
+ 			}
++			GodotRuntime.error(err);
+ 			obj.error = err;
+ 		},
+ 
+@@ -89,6 +89,47 @@ const GodotFetch = {
+ 				chunks: [],
+ 			};
+ 			const id = IDHandler.add(obj);
++			if (typeof wx !== 'undefined' && typeof wx.request === 'function') {
++				const header = {};
++				headers.forEach(function (pair) {
++					header[pair[0]] = pair[1];
++				});
++				const data = body
++					? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)
++					: undefined;
++				obj.request = wx.request({
++					url: url,
++					method: method,
++					header: header,
++					data: data,
++					responseType: 'arraybuffer',
++					success: function (result) {
++						const responseHeaders = result.header || {};
++						const response = {
++							status: result.statusCode || 0,
++							body: null,
++							headers: {
++								forEach: function (callback) {
++									Object.keys(responseHeaders).forEach(function (key) {
++										callback(String(responseHeaders[key]), key);
++									});
++								},
++							},
++						};
++						GodotFetch.onresponse(id, response);
++						if (result.data instanceof ArrayBuffer) {
++							const bytes = new Uint8Array(result.data);
++							if (bytes.length) {
++								obj.chunks.push(bytes);
++							}
++						}
++					},
++					fail: function (error) {
++						GodotFetch.onerror(id, error);
++					},
++				});
++				return id;
++			}
+ 			const init = {
+ 				method: method,
+ 				headers: headers,
+@@ -108,6 +149,12 @@ const GodotFetch = {
+ 			if (!obj.request) {
+ 				return;
+ 			}
++			if (typeof wx !== 'undefined' && typeof obj.request.abort === 'function') {
++				try {
++					obj.request.abort();
++				} catch (e) { /* nothing to do */ }
++				return;
++			}
+ 			// Try to abort
+ 			obj.request.then(function (response) {
+ 				response.abort();
+diff --git a/platform/web/js/libs/library_godot_input.js b/platform/web/js/libs/library_godot_input.js
+index fce4141..69370e8 100644
+--- a/platform/web/js/libs/library_godot_input.js
++++ b/platform/web/js/libs/library_godot_input.js
+@@ -92,6 +92,10 @@ const GodotIME = {
+ 		},
+ 
+ 		init: function (ime_cb, key_cb, code, key) {
++			if (typeof wx !== 'undefined') {
++				GodotIME.ime = null;
++				return;
++			}
+ 			function key_event_cb(pressed, evt) {
+ 				const modifiers = GodotIME.getModifiers(evt);
+ 				GodotRuntime.stringToHeap(evt.code, code, 32);
+diff --git a/platform/web/js/libs/library_godot_os.js b/platform/web/js/libs/library_godot_os.js
+index 0e931b7..efc2a63 100644
+--- a/platform/web/js/libs/library_godot_os.js
++++ b/platform/web/js/libs/library_godot_os.js
+@@ -96,6 +96,10 @@ const GodotConfig = {
+ 	godot_js_config_canvas_id_get__proxy: 'sync',
+ 	godot_js_config_canvas_id_get__sig: 'vii',
+ 	godot_js_config_canvas_id_get: function (p_ptr, p_ptr_max) {
++		if (typeof wx !== 'undefined') {
++			GodotRuntime.stringToHeap('#canvas', p_ptr, p_ptr_max);
++			return;
++		}
+ 		GodotRuntime.stringToHeap(`#${GodotConfig.canvas.id}`, p_ptr, p_ptr_max);
+ 	},
+ 
+@@ -114,16 +118,75 @@ const GodotFS = {
+ 	$GodotFS__postset: [
+ 		'Module["initFS"] = GodotFS.init;',
+ 		'Module["copyToFS"] = GodotFS.copy_to_fs;',
++		'Module["wxFSSync"] = GodotFS.sync;',
+ 	].join(''),
+ 	$GodotFS: {
+ 		// ERRNO_CODES works every odd version of emscripten, but this will break too eventually.
+ 		ENOENT: 44,
+ 		_idbfs: false,
++		_wxfs: false,
++		_wx_root: '',
+ 		_syncing: false,
+ 		_mount_points: [],
+ 
+ 		is_persistent: function () {
+-			return GodotFS._idbfs ? 1 : 0;
++			return GodotFS._idbfs || GodotFS._wxfs ? 1 : 0;
++		},
++
++		wx_mkdir: function (path) {
++			const fs = wx.getFileSystemManager();
++			try { fs.accessSync(path); } catch (e) { fs.mkdirSync(path, true); }
++		},
++
++		wx_clear: function (path) {
++			const fs = wx.getFileSystemManager();
++			let names;
++			try { names = fs.readdirSync(path); } catch (e) { return; }
++			names.forEach(function (name) {
++				const child = `${path}/${name}`;
++				const stat = fs.statSync(child);
++				if (stat.isDirectory()) {
++					GodotFS.wx_clear(child);
++					fs.rmdirSync(child);
++				} else {
++					fs.unlinkSync(child);
++				}
++			});
++		},
++
++		wx_import: function (memPath, diskPath) {
++			const fs = wx.getFileSystemManager();
++			let names;
++			try { names = fs.readdirSync(diskPath); } catch (e) { return; }
++			names.forEach(function (name) {
++				const src = `${diskPath}/${name}`;
++				const dst = `${memPath}/${name}`;
++				const stat = fs.statSync(src);
++				if (stat.isDirectory()) {
++					FS.mkdirTree(dst);
++					GodotFS.wx_import(dst, src);
++				} else {
++					FS.writeFile(dst, new Uint8Array(fs.readFileSync(src)));
++				}
++			});
++		},
++
++		wx_export: function (memPath, diskPath) {
++			const fs = wx.getFileSystemManager();
++			GodotFS.wx_mkdir(diskPath);
++			FS.readdir(memPath).forEach(function (name) {
++				if (name === '.' || name === '..') return;
++				const src = `${memPath}/${name}`;
++				const dst = `${diskPath}/${name}`;
++				const stat = FS.stat(src);
++				if (FS.isDir(stat.mode)) {
++					GodotFS.wx_export(src, dst);
++				} else {
++					const bytes = FS.readFile(src);
++					const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
++					fs.writeFileSync(dst, data);
++				}
++			});
+ 		},
+ 
+ 		// Initialize godot file system, setting up persistent paths.
+@@ -132,6 +195,8 @@ const GodotFS = {
+ 		// since emscripten is not doing it by itself. (emscripten GH#12516).
+ 		init: function (persistentPaths) {
+ 			GodotFS._idbfs = false;
++			GodotFS._wxfs = false;
++			GodotFS._wx_root = '';
+ 			if (!Array.isArray(persistentPaths)) {
+ 				return Promise.reject(new Error('Persistent paths must be an array'));
+ 			}
+@@ -152,6 +217,17 @@ const GodotFS = {
+ 				}
+ 			}
+ 
++			if (typeof wx !== 'undefined' && wx.env && wx.env.USER_DATA_PATH) {
++				GodotFS._mount_points.forEach(createRecursive);
++				GodotFS._wx_root = `${wx.env.USER_DATA_PATH}/godot-userfs`;
++				GodotFS.wx_mkdir(GodotFS._wx_root);
++				if (GodotFS._mount_points.indexOf('/userfs') !== -1) {
++					GodotFS.wx_import('/userfs', GodotFS._wx_root);
++				}
++				GodotFS._wxfs = true;
++				return Promise.resolve();
++			}
++
+ 			GodotFS._mount_points.forEach(function (path) {
+ 				createRecursive(path);
+ 				FS.mount(IDBFS, {}, path);
+@@ -172,19 +248,19 @@ const GodotFS = {
+ 
+ 		// Deinit godot file system, making sure to unmount file systems, and close IDBFS(s).
+ 		deinit: function () {
+-			GodotFS._mount_points.forEach(function (path) {
+-				try {
+-					FS.unmount(path);
+-				} catch (e) {
+-					GodotRuntime.print('Already unmounted', e);
+-				}
+-				if (GodotFS._idbfs && IDBFS.dbs[path]) {
+-					IDBFS.dbs[path].close();
+-					delete IDBFS.dbs[path];
+-				}
+-			});
++			if (GodotFS._idbfs) {
++				GodotFS._mount_points.forEach(function (path) {
++					try { FS.unmount(path); } catch (e) { GodotRuntime.print('Already unmounted', e); }
++					if (IDBFS.dbs[path]) {
++						IDBFS.dbs[path].close();
++						delete IDBFS.dbs[path];
++					}
++				});
++			}
+ 			GodotFS._mount_points = [];
+ 			GodotFS._idbfs = false;
++			GodotFS._wxfs = false;
++			GodotFS._wx_root = '';
+ 			GodotFS._syncing = false;
+ 		},
+ 
+@@ -194,6 +270,19 @@ const GodotFS = {
+ 				return Promise.resolve();
+ 			}
+ 			GodotFS._syncing = true;
++			if (GodotFS._wxfs) {
++				let error = null;
++				try {
++					GodotFS.wx_mkdir(GodotFS._wx_root);
++					GodotFS.wx_clear(GodotFS._wx_root);
++					GodotFS.wx_export('/userfs', GodotFS._wx_root);
++				} catch (e) {
++					error = e;
++					GodotRuntime.error(`Failed to save WeChat file system: ${e.message || e}`);
++				}
++				GodotFS._syncing = false;
++				return Promise.resolve(error);
++			}
+ 			return new Promise(function (resolve, reject) {
+ 				FS.syncfs(false, function (error) {
+ 					if (error) {

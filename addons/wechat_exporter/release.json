@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "plugin_version": "0.6.0",
+  "runtime_id": "godot-4.7.2-wx-r1",
+  "godot": {
+    "version": "4.7.2",
+    "commit": "ed1daf0bf"
+  },
+  "update_manifest_schema": 1,
+  "default_update_manifest": ""
+}
