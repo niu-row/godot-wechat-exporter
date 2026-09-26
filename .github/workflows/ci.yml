@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Download Godot 4.7.2
+        run: |
+          mkdir -p "$RUNNER_TEMP/godot"
+          curl -fL \
+            "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_macos.universal.zip" \
+            -o "$RUNNER_TEMP/godot.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          GODOT_BIN=$(find "$RUNNER_TEMP/godot" -type f \
+            -path "*/Contents/MacOS/Godot" | head -1)
+          test -n "$GODOT_BIN"
+          chmod +x "$GODOT_BIN"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+
+      - name: Run regression suite
+        run: tools/wechat/tests/run_tests.sh
+
+      - name: Validate release package
+        run: |
+          python3 tools/wechat/package_plugin.py
+          python3 - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+
+          release = json.loads(
+              Path("addons/wechat_exporter/release.json").read_text()
+          )
+          version = release["plugin_version"]
+          package = Path(
+              f"dist/wechat_exporter/godot-wechat-exporter-{version}.zip"
+          )
+          with zipfile.ZipFile(package) as archive:
+              names = archive.namelist()
+              assert names
+              assert all(
+                  name.startswith("addons/wechat_exporter/")
+                  for name in names
+              )
+              assert archive.testzip() is None
+          print("RELEASE_PACKAGE_OK")
+          PY

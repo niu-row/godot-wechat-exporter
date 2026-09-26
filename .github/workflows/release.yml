@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate tag version
+        run: |
+          VERSION=$(python3 - <<'PY'
+          import json
+          print(json.load(open(
+              "addons/wechat_exporter/release.json"
+          ))["plugin_version"])
+          PY
+          )
+          test "$GITHUB_REF_NAME" = "v$VERSION"
+
+      - name: Download Godot 4.7.2
+        run: |
+          mkdir -p "$RUNNER_TEMP/godot"
+          curl -fL \
+            "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_macos.universal.zip" \
+            -o "$RUNNER_TEMP/godot.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          GODOT_BIN=$(find "$RUNNER_TEMP/godot" -type f \
+            -path "*/Contents/MacOS/Godot" | head -1)
+          test -n "$GODOT_BIN"
+          chmod +x "$GODOT_BIN"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+
+      - name: Run regression suite
+        run: tools/wechat/tests/run_tests.sh
+
+      - name: Prepare signing key
+        env:
+          SIGNING_KEY_PEM: ${{ secrets.WECHAT_EXPORTER_SIGNING_KEY_PEM }}
+        run: |
+          test -n "$SIGNING_KEY_PEM"
+          umask 077
+          printf '%s\n' "$SIGNING_KEY_PEM" > "$RUNNER_TEMP/release_private.pem"
+
+      - name: Build signed release
+        run: |
+          python3 tools/wechat/package_plugin.py \
+            --output-dir dist/wechat_exporter \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
+            --private-key "$RUNNER_TEMP/release_private.pem"
+      - name: Verify signed release assets
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          test -f "dist/wechat_exporter/godot-wechat-exporter-$VERSION.zip"
+          test -f dist/wechat_exporter/stable.json
+          test -f dist/wechat_exporter/stable.json.sig
+          openssl dgst -sha256 \
+            -verify addons/wechat_exporter/release_public.pem \
+            -signature dist/wechat_exporter/stable.json.sig \
+            dist/wechat_exporter/stable.json
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/wechat_exporter/godot-wechat-exporter-$VERSION.zip" \
+            dist/wechat_exporter/stable.json \
+            dist/wechat_exporter/stable.json.sig \
+            --title "Godot WeChat Exporter $VERSION" \
+            --generate-notes
