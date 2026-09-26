@@ -116,18 +116,23 @@ macOS 下会自动检测：
 
 其他操作系统可以手动配置 CLI 路径，但目前端到端验收以 macOS 为主。
 
-## Runtime 限制
+## Runtime / 平台边界
 
-目前不完整支持：
+当前发行版不支持以下能力。这些限制主要来自 Godot Web/WASM 架构或微信小游戏运行环境，不是简单的插件适配项：
 
-- pthread / Threads
-- GDExtension
+- pthread / Godot Thread API
+- 通用 GDExtension 动态加载
 - C# / .NET
 - Forward+ / Mobile renderer
-- WebSocket
-- IME / 键盘文本输入
 
-HTTP 请求通过 `wx.request` 桥接；小游戏仍需要在微信后台配置合法 request 域名。
+## 尚未完成的微信适配
+
+以下能力平台本身具备，但当前 runtime 尚未完成对应桥接：
+
+- WebSocket：微信提供 Socket API，当前尚未完成 Godot `WebSocketPeer` 到微信 Socket 的适配
+- 文本输入 / 虚拟键盘：微信提供键盘 API，普通文本输入具备适配条件；完整 IME composition 行为仍需进一步真机验证
+
+HTTP 请求已经通过 `wx.request` 桥接；小游戏仍需要在微信后台配置合法 request 域名。
 
 ## 许可证
 

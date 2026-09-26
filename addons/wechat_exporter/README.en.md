@@ -118,18 +118,23 @@ Enable the service port once in:
 
 Other operating systems can use a manually configured CLI path, but current end-to-end acceptance coverage is macOS-first.
 
-## Runtime limitations
+## Runtime / platform boundaries
 
-Not fully supported:
+The current release does not support the following capabilities. These are primarily constrained by the Godot Web/WASM architecture or the WeChat Mini Game runtime rather than being simple plugin-adaptation gaps:
 
-- pthread / Threads
-- GDExtension
+- pthread / Godot Thread APIs
+- general-purpose dynamic GDExtension loading
 - C# / .NET
 - Forward+ / Mobile renderer
-- WebSocket
-- IME / keyboard text input
 
-HTTP requests are bridged through `wx.request`; the Mini Game still needs the appropriate WeChat request-domain configuration.
+## WeChat adaptations not yet implemented
+
+The platform provides related capabilities, but the current runtime does not yet bridge them to Godot:
+
+- WebSocket: WeChat provides Socket APIs, but the `WebSocketPeer` bridge is not implemented yet
+- text input / virtual keyboard: WeChat provides keyboard APIs, so normal text input can be adapted; full IME composition behavior still requires device validation
+
+HTTP requests are already bridged through `wx.request`; the Mini Game still needs the appropriate WeChat request-domain configuration.
 
 ## License
 
